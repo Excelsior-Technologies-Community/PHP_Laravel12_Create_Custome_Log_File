@@ -1,59 +1,205 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# PHP_Laravel12_Create_Custome_Log_File
 
 <p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+  <img src="https://img.shields.io/badge/Laravel-12.x-f72c1f?style=for-the-badge&logo=laravel" />
+  <img src="https://img.shields.io/badge/Custom-Logging-green?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/File-System-Logs-orange?style=for-the-badge" />
 </p>
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+##  Overview  
+This guide explains how to create a **custom log file** in Laravel 12 and store different log levels  
+(info, warning, error) into a separate file for cleaner debugging.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+---
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+##  Features  
+- Custom log channel in `logging.php`  
+- Single & daily rotating logs  
+- Route-based log writing  
+- Auto-creating custom log file  
+- JSON-friendly structured logs  
 
-## Learning Laravel
+---
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+##  Folder Structure  
+```
+config/
+│── logging.php
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+routes/
+│── web.php
 
-## Laravel Sponsors
+storage/
+└── logs/
+    ├── laravel.log
+    └── custom.log
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+.env
+README.md
+```
 
-### Premium Partners
+---
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+#  Step 1 — Install Laravel  
+```bash
+composer create-project laravel/laravel custom-log-demo
+cd custom-log-demo
+```
 
-## Contributing
+---
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+#  Step 2 — Setup .env File  
+```
+APP_NAME=CustomLogDemo
+APP_ENV=local
+APP_DEBUG=true
 
-## Code of Conduct
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=custom_log_demo
+DB_USERNAME=root
+DB_PASSWORD=
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+SESSION_DRIVER=file
+```
 
-## Security Vulnerabilities
+✔ `SESSION_DRIVER=file` prevents session table errors.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+---
 
-## License
+#  Step 3 — Add Custom Log Channels  
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+ config/logging.php
+
+```php
+'custom' => [
+    'driver' => 'single',
+    'path' => storage_path('logs/custom.log'),
+    'level' => 'debug',
+],
+
+'custom_daily' => [
+    'driver' => 'daily',
+    'path' => storage_path('logs/custom/custom.log'),
+    'days' => 7,
+    'level' => 'debug',
+],
+```
+
+✔ `custom` → one file  
+✔ `custom_daily` → new file every day  
+
+---
+
+#  Step 4 — Clear Cache  
+```bash
+php artisan config:clear
+php artisan cache:clear
+php artisan optimize:clear
+php artisan serve
+```
+
+---
+
+#  Step 5 — Create Route to Test Logging  
+
+ routes/web.php
+
+```php
+<?php
+
+use Illuminate\Support\Facades\Log;
+
+Route::get('/test-log', function () {
+
+    Log::channel('custom')->info('Custom Log: Info message');
+    Log::channel('custom')->warning('Custom Log: Warning message');
+    Log::channel('custom')->error('Custom Log: Error message');
+
+    return "Custom logs written successfully!";
+});
+```
+
+✔ Automatically creates:  
+```
+storage/logs/custom.log
+```
+
+---
+
+#  Step 6 — Test in Browser  
+Open:
+
+```
+http://localhost:8000/test-log
+```
+
+Check file:
+
+```
+storage/logs/custom.log
+```
+
+Expected:
+
+```
+[2025-12-10] local.INFO: Custom Log: Info message
+[2025-12-10] local.WARNING: Custom Log: Warning message
+[2025-12-10] local.ERROR: Custom Log: Error message
+```
+
+---
+
+#  Optional — Manual File Write Test  
+
+```php
+Route::get('/file-test', function () {
+    file_put_contents(
+        storage_path('logs/custom.log'),
+        "This is a manual test log.\n",
+        FILE_APPEND
+    );
+
+    return "Manual LOG WRITTEN — check storage/logs/custom.log";
+});
+```
+
+---
+
+
+#  Log Anywhere in Laravel  
+
+```php
+Log::channel('custom')->info('User logged in');
+```
+
+---
+
+#  Your Custom Logging System is Ready!  
+
+✔ Custom log channel  
+✔ Clean debugging  
+✔ Daily rotating logs  
+✔ Easy integration  
+
+---
+
+
+###SCREENSHOTS:-
+
+Browser Side:-
+
+
+<img width="409" height="124" alt="Screenshot 2025-12-10 122421" src="https://github.com/user-attachments/assets/09e0bd67-a1d3-4a0a-ba63-42a430bb1eae" />
+
+
+
+Custom Log File:-
+
+
+<img width="696" height="112" alt="Screenshot 2025-12-10 122448" src="https://github.com/user-attachments/assets/51745152-9862-4653-9037-d36f90bada25" />
+
+
