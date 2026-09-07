@@ -1,9 +1,10 @@
 <?php
 
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\LogViewerController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -78,54 +79,54 @@ Route::get('/test-context-log', function () {
         ]
     );
 
-DB::table('logs')->insert([
-    [
-        'level' => 'info',
-        'message' => 'User Login Event',
-        'channel' => 'custom',
-        'ip' => request()->ip(),
-        'user_id' => 1,
-        'url' => request()->fullUrl(),
-        'method' => request()->method(),
-        'context' => json_encode([
+    DB::table('logs')->insert([
+        [
+            'level' => 'info',
+            'message' => 'User Login Event',
+            'channel' => 'custom',
+            'ip' => request()->ip(),
             'user_id' => 1,
-        ]),
-        'created_at' => now(),
-        'updated_at' => now(),
-    ],
+            'url' => request()->fullUrl(),
+            'method' => request()->method(),
+            'context' => json_encode([
+                'user_id' => 1,
+            ]),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
 
-    [
-        'level' => 'warning',
-        'message' => 'Low Stock Warning',
-        'channel' => 'custom',
-        'ip' => request()->ip(),
-        'user_id' => null, // IMPORTANT
-        'url' => request()->fullUrl(),
-        'method' => request()->method(),
-        'context' => json_encode([
-            'product_id' => 42,
-            'stock' => 3,
-        ]),
-        'created_at' => now(),
-        'updated_at' => now(),
-    ],
+        [
+            'level' => 'warning',
+            'message' => 'Low Stock Warning',
+            'channel' => 'custom',
+            'ip' => request()->ip(),
+            'user_id' => null,
+            'url' => request()->fullUrl(),
+            'method' => request()->method(),
+            'context' => json_encode([
+                'product_id' => 42,
+                'stock' => 3,
+            ]),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
 
-    [
-        'level' => 'error',
-        'message' => 'Payment Failed',
-        'channel' => 'custom',
-        'ip' => request()->ip(),
-        'user_id' => 1,
-        'url' => request()->fullUrl(),
-        'method' => request()->method(),
-        'context' => json_encode([
-            'amount' => 999,
-            'error_code' => 'CARD_DECLINED',
-        ]),
-        'created_at' => now(),
-        'updated_at' => now(),
-    ],
-]);
+        [
+            'level' => 'error',
+            'message' => 'Payment Failed',
+            'channel' => 'custom',
+            'ip' => request()->ip(),
+            'user_id' => 1,
+            'url' => request()->fullUrl(),
+            'method' => request()->method(),
+            'context' => json_encode([
+                'amount' => 999,
+                'error_code' => 'CARD_DECLINED',
+            ]),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+    ]);
 
     return 'Context logs written to file + database!';
 });
@@ -157,7 +158,7 @@ Route::get('/test-daily-log', function () {
 
 /*
 |--------------------------------------------------------------------------
-| Existing File Log Viewer
+| File Log Viewer
 |--------------------------------------------------------------------------
 */
 
@@ -180,7 +181,7 @@ Route::get(
 
 /*
 |--------------------------------------------------------------------------
-| Download
+| Download File Log
 |--------------------------------------------------------------------------
 */
 
@@ -204,8 +205,46 @@ Route::get(
 
 /*
 |--------------------------------------------------------------------------
-| NEW FEATURE 1
-| Log Analytics Dashboard
+| NEW FEATURE 4
+| CSV Export
+|--------------------------------------------------------------------------
+*/
+
+Route::get(
+    '/logs/db/export',
+    [LogViewerController::class, 'exportCsv']
+)->name('logs.export');
+
+
+/*
+|--------------------------------------------------------------------------
+| NEW FEATURE 5
+| Individual Log Details
+|--------------------------------------------------------------------------
+*/
+
+Route::get(
+    '/logs/details/{id}',
+    [LogViewerController::class, 'details']
+)->name('logs.details');
+
+
+/*
+|--------------------------------------------------------------------------
+| NEW FEATURE 6
+| Delete Individual Log
+|--------------------------------------------------------------------------
+*/
+
+Route::delete(
+    '/logs/{id}/delete',
+    [LogViewerController::class, 'deleteLog']
+)->name('logs.delete');
+
+
+/*
+|--------------------------------------------------------------------------
+| Analytics Dashboard
 |--------------------------------------------------------------------------
 */
 
@@ -217,7 +256,6 @@ Route::get(
 
 /*
 |--------------------------------------------------------------------------
-| NEW FEATURE 2
 | Log Management
 |--------------------------------------------------------------------------
 */
@@ -254,7 +292,6 @@ Route::post(
 
 /*
 |--------------------------------------------------------------------------
-| NEW FEATURE 3
 | Cleanup Old Logs
 |--------------------------------------------------------------------------
 */

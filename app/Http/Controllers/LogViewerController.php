@@ -15,42 +15,85 @@ class LogViewerController extends Controller
         $this->logFile = storage_path('logs/custom.log');
     }
 
-    /**
-     * File log viewer
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | FILE LOG VIEWER
+    |--------------------------------------------------------------------------
+    */
+
     public function index(Request $request)
     {
-        $filter = $request->query('level', 'all');
+        $filter = strtolower($request->query('level', 'all'));
         $search = trim($request->query('search', ''));
 
-        $logs = $this->parseLogs($filter, $search);
+        $dateFrom = $request->query('date_from');
+        $dateTo = $request->query('date_to');
+
+        $perPage = 10;
+
+        $logs = $this->parseLogs(
+            $filter,
+            $search,
+            $dateFrom,
+            $dateTo
+        );
+
+        $total = count($logs);
+
+        $page = max(
+            1,
+            (int) $request->query('page', 1)
+        );
+
+        $offset = ($page - 1) * $perPage;
+
+        $paginatedLogs = array_slice(
+            $logs,
+            $offset,
+            $perPage
+        );
+
+        $pagination = [
+            'current_page' => $page,
+            'last_page' => max(
+                1,
+                (int) ceil($total / $perPage)
+            ),
+            'total' => $total,
+            'per_page' => $perPage,
+        ];
 
         return view('log-viewer', compact(
-            'logs',
+            'paginatedLogs',
             'filter',
-            'search'
+            'search',
+            'dateFrom',
+            'dateTo',
+            'pagination'
         ));
     }
 
-    /**
-     * Filter file logs by level
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | FILTER FILE LOGS
+    |--------------------------------------------------------------------------
+    */
+
     public function filterByLevel(Request $request, string $level)
     {
-        $search = trim($request->query('search', ''));
-
-        $logs = $this->parseLogs($level, $search);
-
-        return view('log-viewer', [
-            'logs'   => $logs,
-            'filter' => $level,
-            'search' => $search,
+        $request->merge([
+            'level' => $level
         ]);
+
+        return $this->index($request);
     }
 
-    /**
-     * Download custom log file
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | DOWNLOAD CUSTOM LOG
+    |--------------------------------------------------------------------------
+    */
+
     public function download()
     {
         if (!file_exists($this->logFile)) {
@@ -63,46 +106,162 @@ class LogViewerController extends Controller
         );
     }
 
-    /**
-     * Database logs with advanced filters.
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | DATABASE LOGS
+    |--------------------------------------------------------------------------
+    */
+
     public function dbLogs(Request $request)
     {
-        $level = $request->query('level', 'all');
-        $search = trim($request->query('search', ''));
-        $method = strtoupper(trim($request->query('method', 'all')));
+        $level = strtolower(
+            $request->query('level', 'all')
+        );
+
+        $search = trim(
+            $request->query('search', '')
+        );
+
+        $method = strtoupper(
+            trim($request->query('method', 'all'))
+        );
+
         $dateFrom = $request->query('date_from');
         $dateTo = $request->query('date_to');
 
-        $query = DB::table('logs')
-            ->orderByDesc('created_at');
+        $sort = $request->query(
+            'sort',
+            'created_at'
+        );
+
+        $direction = strtolower(
+            $request->query('direction', 'desc')
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Allowed sorting columns
+        |--------------------------------------------------------------------------
+        */
+
+        $allowedSorts = [
+            'id',
+            'level',
+            'method',
+            'ip',
+            'created_at',
+        ];
+
+        if (!in_array($sort, $allowedSorts)) {
+            $sort = 'created_at';
+        }
+
+        if (!in_array($direction, ['asc', 'desc'])) {
+            $direction = 'desc';
+        }
+
+        $query = DB::table('logs');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Level Filter
+        |--------------------------------------------------------------------------
+        */
 
         if ($level !== 'all') {
-            $query->where('level', strtolower($level));
+            $query->where(
+                'level',
+                $level
+            );
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Search
+        |--------------------------------------------------------------------------
+        */
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
-                $q->where('message', 'like', "%{$search}%")
-                    ->orWhere('url', 'like', "%{$search}%")
-                    ->orWhere('ip', 'like', "%{$search}%");
+
+                $q->where(
+                    'message',
+                    'like',
+                    "%{$search}%"
+                )
+                    ->orWhere(
+                        'url',
+                        'like',
+                        "%{$search}%"
+                    )
+                    ->orWhere(
+                        'ip',
+                        'like',
+                        "%{$search}%"
+                    );
             });
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | HTTP Method
+        |--------------------------------------------------------------------------
+        */
+
         if ($method !== 'ALL') {
-            $query->where('method', $method);
+            $query->where(
+                'method',
+                $method
+            );
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Date From
+        |--------------------------------------------------------------------------
+        */
 
         if ($dateFrom) {
-            $query->whereDate('created_at', '>=', $dateFrom);
+            $query->whereDate(
+                'created_at',
+                '>=',
+                $dateFrom
+            );
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Date To
+        |--------------------------------------------------------------------------
+        */
 
         if ($dateTo) {
-            $query->whereDate('created_at', '<=', $dateTo);
+            $query->whereDate(
+                'created_at',
+                '<=',
+                $dateTo
+            );
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | Sorting
+        |--------------------------------------------------------------------------
+        */
+
+        $query->orderBy(
+            $sort,
+            $direction
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Pagination
+        |--------------------------------------------------------------------------
+        */
+
         $logs = $query
-            ->paginate(20)
+            ->paginate(10)
             ->withQueryString();
 
         return view('db-logs', compact(
@@ -111,13 +270,200 @@ class LogViewerController extends Controller
             'search',
             'method',
             'dateFrom',
-            'dateTo'
+            'dateTo',
+            'sort',
+            'direction'
         ));
     }
 
-    /**
-     * Analytics dashboard.
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | CSV EXPORT
+    |--------------------------------------------------------------------------
+    */
+
+    public function exportCsv(Request $request)
+    {
+        $level = strtolower(
+            $request->query('level', 'all')
+        );
+
+        $search = trim(
+            $request->query('search', '')
+        );
+
+        $method = strtoupper(
+            trim($request->query('method', 'all'))
+        );
+
+        $dateFrom = $request->query('date_from');
+        $dateTo = $request->query('date_to');
+
+        $query = DB::table('logs')
+            ->orderByDesc('created_at');
+
+        if ($level !== 'all') {
+            $query->where(
+                'level',
+                $level
+            );
+        }
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+
+                $q->where(
+                    'message',
+                    'like',
+                    "%{$search}%"
+                )
+                    ->orWhere(
+                        'url',
+                        'like',
+                        "%{$search}%"
+                    )
+                    ->orWhere(
+                        'ip',
+                        'like',
+                        "%{$search}%"
+                    );
+            });
+        }
+
+        if ($method !== 'ALL') {
+            $query->where(
+                'method',
+                $method
+            );
+        }
+
+        if ($dateFrom) {
+            $query->whereDate(
+                'created_at',
+                '>=',
+                $dateFrom
+            );
+        }
+
+        if ($dateTo) {
+            $query->whereDate(
+                'created_at',
+                '<=',
+                $dateTo
+            );
+        }
+
+        $logs = $query->get();
+
+        $filename =
+            'database-logs-' .
+            now()->format('Y-m-d-H-i-s') .
+            '.csv';
+
+        return response()->streamDownload(
+            function () use ($logs) {
+
+                $handle = fopen(
+                    'php://output',
+                    'w'
+                );
+
+                fputcsv($handle, [
+                    'ID',
+                    'Level',
+                    'Channel',
+                    'Message',
+                    'Method',
+                    'IP',
+                    'User ID',
+                    'URL',
+                    'Context',
+                    'Created At',
+                ]);
+
+                foreach ($logs as $log) {
+
+                    fputcsv($handle, [
+                        $log->id,
+                        $log->level,
+                        $log->channel,
+                        $log->message,
+                        $log->method,
+                        $log->ip,
+                        $log->user_id,
+                        $log->url,
+                        $log->context,
+                        $log->created_at,
+                    ]);
+                }
+
+                fclose($handle);
+            },
+            $filename,
+            [
+                'Content-Type' =>
+                'text/csv',
+            ]
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | DELETE INDIVIDUAL DATABASE LOG
+    |--------------------------------------------------------------------------
+    */
+
+    public function deleteLog(int $id)
+    {
+        $deleted = DB::table('logs')
+            ->where('id', $id)
+            ->delete();
+
+        if (!$deleted) {
+
+            return back()->with(
+                'error',
+                'Log not found.'
+            );
+        }
+
+        return back()->with(
+            'success',
+            'Log deleted successfully.'
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | LOG DETAILS
+    |--------------------------------------------------------------------------
+    */
+
+    public function details(int $id)
+    {
+        $log = DB::table('logs')
+            ->where('id', $id)
+            ->first();
+
+        if (!$log) {
+            abort(
+                404,
+                'Log not found.'
+            );
+        }
+
+        return view(
+            'log-details',
+            compact('log')
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | ANALYTICS DASHBOARD
+    |--------------------------------------------------------------------------
+    */
+
     public function dashboard()
     {
         $total = DB::table('logs')->count();
@@ -143,15 +489,26 @@ class LogViewerController extends Controller
             ->count();
 
         $today = DB::table('logs')
-            ->whereDate('created_at', today())
+            ->whereDate(
+                'created_at',
+                today()
+            )
             ->count();
 
         $lastSevenDays = DB::table('logs')
-            ->where('created_at', '>=', now()->subDays(7))
+            ->where(
+                'created_at',
+                '>=',
+                now()->subDays(7)
+            )
             ->count();
 
         $lastThirtyDays = DB::table('logs')
-            ->where('created_at', '>=', now()->subDays(30))
+            ->where(
+                'created_at',
+                '>=',
+                now()->subDays(30)
+            )
             ->count();
 
         $uniqueIps = DB::table('logs')
@@ -160,7 +517,12 @@ class LogViewerController extends Controller
             ->count('ip');
 
         $mostUsedLevel = DB::table('logs')
-            ->select('level', DB::raw('COUNT(*) as total'))
+            ->select(
+                'level',
+                DB::raw(
+                    'COUNT(*) as total'
+                )
+            )
             ->groupBy('level')
             ->orderByDesc('total')
             ->first();
@@ -168,7 +530,9 @@ class LogViewerController extends Controller
         $httpMethods = DB::table('logs')
             ->select(
                 'method',
-                DB::raw('COUNT(*) as total')
+                DB::raw(
+                    'COUNT(*) as total'
+                )
             )
             ->whereNotNull('method')
             ->groupBy('method')
@@ -176,76 +540,115 @@ class LogViewerController extends Controller
             ->get();
 
         $recentErrors = DB::table('logs')
-            ->whereIn('level', ['error', 'critical'])
+            ->whereIn(
+                'level',
+                [
+                    'error',
+                    'critical'
+                ]
+            )
             ->orderByDesc('created_at')
             ->limit(10)
             ->get();
 
         $dailyStats = DB::table('logs')
             ->select(
-                DB::raw('DATE(created_at) as log_date'),
-                DB::raw('COUNT(*) as total')
+                DB::raw(
+                    'DATE(created_at) as log_date'
+                ),
+                DB::raw(
+                    'COUNT(*) as total'
+                )
             )
-            ->where('created_at', '>=', now()->subDays(6)->startOfDay())
-            ->groupBy(DB::raw('DATE(created_at)'))
+            ->where(
+                'created_at',
+                '>=',
+                now()
+                    ->subDays(6)
+                    ->startOfDay()
+            )
+            ->groupBy(
+                DB::raw(
+                    'DATE(created_at)'
+                )
+            )
             ->orderBy('log_date')
             ->get();
 
-        return view('log-dashboard', compact(
-            'total',
-            'info',
-            'warning',
-            'error',
-            'debug',
-            'critical',
-            'today',
-            'lastSevenDays',
-            'lastThirtyDays',
-            'uniqueIps',
-            'mostUsedLevel',
-            'httpMethods',
-            'recentErrors',
-            'dailyStats'
-        ));
+        return view(
+            'log-dashboard',
+            compact(
+                'total',
+                'info',
+                'warning',
+                'error',
+                'debug',
+                'critical',
+                'today',
+                'lastSevenDays',
+                'lastThirtyDays',
+                'uniqueIps',
+                'mostUsedLevel',
+                'httpMethods',
+                'recentErrors',
+                'dailyStats'
+            )
+        );
     }
 
-    /**
-     * Log management page.
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | MANAGEMENT
+    |--------------------------------------------------------------------------
+    */
+
     public function management()
     {
-        $dbCount = DB::table('logs')->count();
+        $dbCount =
+            DB::table('logs')->count();
 
-        $fileExists = file_exists($this->logFile);
+        $fileExists =
+            file_exists($this->logFile);
 
         $fileSize = $fileExists
             ? filesize($this->logFile)
             : 0;
 
-        $dailyLogPath = storage_path('logs/custom');
+        $dailyLogPath =
+            storage_path('logs/custom');
 
         $dailyFiles = 0;
 
         if (is_dir($dailyLogPath)) {
+
             $dailyFiles = count(
-                glob($dailyLogPath . '/*.log')
+                glob(
+                    $dailyLogPath . '/*.log'
+                )
             );
         }
 
-        return view('log-management', compact(
-            'dbCount',
-            'fileExists',
-            'fileSize',
-            'dailyFiles'
-        ));
+        return view(
+            'log-management',
+            compact(
+                'dbCount',
+                'fileExists',
+                'fileSize',
+                'dailyFiles'
+            )
+        );
     }
 
-    /**
-     * Clear database logs.
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | CLEAR DATABASE LOGS
+    |--------------------------------------------------------------------------
+    */
+
     public function clearDatabaseLogs()
     {
-        $deleted = DB::table('logs')->delete();
+        $deleted =
+            DB::table('logs')->delete();
 
         return redirect()
             ->route('logs.management')
@@ -255,13 +658,20 @@ class LogViewerController extends Controller
             );
     }
 
-    /**
-     * Clear main custom.log file.
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | CLEAR FILE LOGS
+    |--------------------------------------------------------------------------
+    */
+
     public function clearFileLogs()
     {
         if (file_exists($this->logFile)) {
-            file_put_contents($this->logFile, '');
+
+            file_put_contents(
+                $this->logFile,
+                ''
+            );
         }
 
         return redirect()
@@ -272,23 +682,35 @@ class LogViewerController extends Controller
             );
     }
 
-    /**
-     * Clear old logs using existing Artisan command.
-     */
-    public function cleanupOldLogs(Request $request)
-    {
-        $days = (int) $request->input('days', 30);
+    /*
+    |--------------------------------------------------------------------------
+    | CLEAN OLD LOGS
+    |--------------------------------------------------------------------------
+    */
+
+    public function cleanupOldLogs(
+        Request $request
+    ) {
+        $days = (int)
+        $request->input(
+            'days',
+            30
+        );
 
         if ($days < 1) {
+
             return back()->with(
                 'error',
                 'Days must be at least 1.'
             );
         }
 
-        Artisan::call('log:clean', [
-            '--days' => $days,
-        ]);
+        Artisan::call(
+            'log:clean',
+            [
+                '--days' => $days,
+            ]
+        );
 
         $output = trim(
             Artisan::output()
@@ -298,29 +720,40 @@ class LogViewerController extends Controller
             ->route('logs.management')
             ->with(
                 'success',
-                $output ?: 'Old logs cleaned successfully.'
+                $output
+                    ?: 'Old logs cleaned successfully.'
             );
     }
 
-    /**
-     * Parse custom.log.
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | PARSE FILE LOGS
+    |--------------------------------------------------------------------------
+    */
+
     private function parseLogs(
         string $filter = 'all',
-        string $search = ''
+        string $search = '',
+        ?string $dateFrom = null,
+        ?string $dateTo = null
     ): array {
+
         if (!file_exists($this->logFile)) {
             return [];
         }
 
         $lines = file(
             $this->logFile,
-            FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES
+            FILE_IGNORE_NEW_LINES |
+                FILE_SKIP_EMPTY_LINES
         );
 
         $logs = [];
 
-        foreach (array_reverse($lines) as $line) {
+        foreach (
+            array_reverse($lines)
+            as $line
+        ) {
 
             if (!preg_match(
                 '/^\[(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[^\]]*)\]\s+\w+\.(\w+):\s+(.+)$/',
@@ -330,8 +763,19 @@ class LogViewerController extends Controller
                 continue;
             }
 
-            $level = strtolower($matches[2]);
+            $datetime = $matches[1];
+
+            $level = strtolower(
+                $matches[2]
+            );
+
             $message = $matches[3];
+
+            /*
+            |--------------------------------------------------------------------------
+            | Level Filter
+            |--------------------------------------------------------------------------
+            */
 
             if (
                 $filter !== 'all' &&
@@ -340,15 +784,56 @@ class LogViewerController extends Controller
                 continue;
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | Search
+            |--------------------------------------------------------------------------
+            */
+
             if (
                 $search !== '' &&
-                stripos($message, $search) === false
+                stripos(
+                    $message,
+                    $search
+                ) === false
+            ) {
+                continue;
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Date From
+            |--------------------------------------------------------------------------
+            */
+
+            $logDate = substr(
+                $datetime,
+                0,
+                10
+            );
+
+            if (
+                $dateFrom &&
+                $logDate < $dateFrom
+            ) {
+                continue;
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Date To
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                $dateTo &&
+                $logDate > $dateTo
             ) {
                 continue;
             }
 
             $logs[] = [
-                'datetime' => $matches[1],
+                'datetime' => $datetime,
                 'level' => $level,
                 'message' => $message,
             ];
